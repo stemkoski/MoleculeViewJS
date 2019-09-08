@@ -1,0 +1,403 @@
+<html>
+
+<head>
+
+    <meta charset="utf-8"/>
+    <title>Molecule Viewer</title>
+
+    <script src="js/three.min.105.js"></script>
+    <script src="js/OrbitControls.js"></script>
+    
+    <script src="js/jquery-3.3.1.js"></script>
+	<link rel="stylesheet" href="js/jquery-ui.css">
+	<script src="js/jquery-ui.js"></script>
+    
+	<script src="js/spectrum.js"></script>
+	<link rel="stylesheet" href="js/spectrum.css">
+    
+    <style>
+    
+    /* easier to read text input */
+    input[type="text"]
+    {
+        font-size: 16px;
+        font-weight: bold;
+        font-family: Courier New, monospace;
+    }
+    
+    .ui-widget textarea
+    {
+        font-size: 16px;
+        font-weight: bold;
+        font-family: Courier New, monospace;
+        resize: none;
+        overflow-y: scroll;
+    }
+    
+    .masterTable
+    {
+        border 2px solid #CCCCCC;
+    }
+    
+    .curveData
+    {
+        border: 2px solid #005337;
+        margin: 8px;
+        background-color: #FFFFEE;
+        font-weight: bold;
+        font-family: Courier;
+        padding: 8px;
+        white-space: nowrap;
+    }
+
+    .left   { text-align: left;   }
+    .center { text-align: center; }
+    .right  { text-align: right;  }
+    
+    td
+    {
+        border: 0px solid #FF0000;
+        
+    }
+    </style>
+
+</head>
+
+<body>
+
+<!-- HTML Components ================================================================================== -->
+
+<center>
+<h1>Test</h1>
+<div id="renderArea" style="display: inline-block; border: 2px solid blue"></div>
+</center>
+
+<!-- TODO: collapsible table; S/M/L image size w:400 800 1200 -->
+<div id="accordion">
+    <h3>Viewer Settings</h3>
+        <div><center><table cellpadding="4">
+        <tr><td class="center">
+            Image size:&nbsp;&nbsp;&nbsp;
+            <button id="smallImageButton">Small</button>&nbsp;&nbsp;&nbsp;
+            <button id="largeImageButton">Large</button>
+        </td></tr>
+        <tr><td class="center">
+            <button id="toggleGrid">Toggle Grid Visibility</button>&nbsp;&nbsp;&nbsp;
+            <button id="toggleAxes">Toggle <b><span style="color: red">X</span><span style="color: green">Y</span><span style="color: blue">Z</span></b> Axis Visibility</button>&nbsp;&nbsp;&nbsp;
+            <button id="toggleLights">Toggle Lighting Effects</button>
+        </td></tr>
+        <tr><td class="center">
+            Sphere Opacity: <div id="sphereOpacity" style="width: 100px; display: inline-block; margin-left:8px; margin-right:12px;"></div>&nbsp;&nbsp;&nbsp;
+            Background Color: <input type="text" id="backgroundColor" />
+        </td></tr>
+        <tr><td class="center">
+            <button id="resetCamera">Reset Camera Position</button>&nbsp;&nbsp;&nbsp;
+            <button id="saveButton">Save Image</button>
+        </td></tr>
+        </table></center></div>
+    <h3>Chemistry Data</h3>
+        <div>
+        
+        Preset data:
+        <select class="selectMenu" id="preset">
+        <option disabled selected>Preset Patterns</option>
+        <option value="H2O.xyz">Water molecule</option>
+        <option value="Ethane.xyz">Ethane</option> 
+        </select>
+        
+        <br/><br/>
+        
+        <textarea disabled cols="60" rows="10" id="chemData"> </textarea>
+        
+         
+        </div>
+</div>
+
+
+
+<!-- ================================== scripts ======================================= -->
+
+<script>
+
+// helpful methods ==========================================================================
+
+
+// simplify replacing string content
+String.prototype.replaceAll = function(search, replacement) 
+{
+    let target = this;
+    return target.split(search).join(replacement);
+};
+
+// simplify removing elements from arrays
+Array.prototype.remove = function (item) 
+{
+    return this.filter(el => el !== item);
+};
+
+// user interface code ====================================================================
+
+$("#smallImageButton").click( function() { 
+    renderer.setSize(400, 300);
+});
+
+$("#largeImageButton").click( function() { 
+    renderer.setSize(800, 600);
+});
+
+$("#saveButton").click( function() { 
+    let canvas = $("#renderArea").find("canvas")[0];
+    let dataURL = canvas.toDataURL('image/png');
+    
+    let link = document.createElement("a");
+    document.body.appendChild(link);
+    link.download = "image.png";
+    link.href = dataURL;
+    link.click();
+    document.body.removeChild(link); 
+});
+
+$("#toggleGrid").click( function() {
+    gridHelper.visible = !gridHelper.visible;
+});
+
+$("#toggleAxes").click( function() {
+    axesHelper.visible = !axesHelper.visible;
+});
+
+$("#toggleLights").click( function() {
+    directionalLight.visible = !directionalLight.visible;
+    softAmbientLight.visible = !softAmbientLight.visible;
+    hardAmbientLight.visible = !hardAmbientLight.visible;
+});
+
+$("#resetCamera").click( function() {
+    camera.position.set(0,1,4);
+    camera.lookAt(0,0,0);
+    controls.target = new THREE.Vector3(0,0,0);
+});
+
+$("#sphereOpacity").slider( {value:100} );
+
+$("#sphereOpacity").on('slide', function(event, ui) {
+    
+    for (let n=0; n < chemGroup.children.length; n++)
+        chemGroup.children[n].material.opacity = ui.value / 100;
+        
+    // sphereMaterial.opacity = ui.value / 100;
+});
+
+// palette of colors for color pickers
+var paletteColors = [
+    ["#000000","#444444","#666666","#999999","#cccccc","#eeeeee","#f3f3f3","#ffffff"],
+    ["#ff0000","#ff9900","#ffff00","#00ff00","#00ffff","#0000ff","#9900ff","#ff00ff"],
+    ["#f4cccc","#fce5cd","#fff2cc","#d9ead3","#d0e0e3","#cfe2f3","#d9d2e9","#ead1dc"],
+    ["#ea9999","#f9cb9c","#ffe599","#b6d7a8","#a2c4c9","#9fc5e8","#b4a7d6","#d5a6bd"],
+    ["#e06666","#f6b26b","#ffd966","#93c47d","#76a5af","#6fa8dc","#8e7cc3","#c27ba0"],
+    ["#cc0000","#e69138","#f1c232","#6aa84f","#45818e","#3d85c6","#674ea7","#a64d79"],
+    ["#990000","#b45f06","#bf9000","#38761d","#134f5c","#0b5394","#351c75","#741b47"],
+    ["#660000","#783f04","#7f6000","#274e13","#0c343d","#073763","#20124d","#4c1130"]
+];
+
+// apply color picker style
+$("#backgroundColor").spectrum({
+    color: "#CCCCCC",
+    showPalette: true,
+    palette: paletteColors,
+    showSelectionPalette: false,
+    cancelText: ""
+});
+
+$("#backgroundColor").on('change', function(e, color) {
+    scene.background = new THREE.Color( color.toHexString() );
+});
+
+$("#backgroundColor").on('move.spectrum', function(e, color) {
+    scene.background = new THREE.Color( color.toHexString() );
+});
+
+$(".selectMenu").selectmenu();
+
+$( "#accordion" ).accordion({
+    collapsible: true
+});
+
+$("#preset").on('selectmenuchange', function() {
+    let selection = this.value;
+    loadData(selection);
+});
+
+// Three.js scene setup ====================================================================
+
+var camera, scene, renderer, controls;
+var gridHelper, axesHelper;
+var softAmbientLight, hardAmbientLight, directionalLight;
+var chemGroup;
+
+initialize();
+animate();
+
+function initialize() 
+{
+    renderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
+
+    // add render area to pre-existing div element
+	container = document.getElementById( "renderArea" );
+	renderer.setSize( 400,300 );
+	container.appendChild( renderer.domElement );
+    
+	scene = new THREE.Scene();
+    
+    softAmbientLight = new THREE.AmbientLight( 0x888888 );
+	scene.add( softAmbientLight );
+    
+    directionalLight = new THREE.DirectionalLight( 0x888888, 0.8 );
+    scene.add( directionalLight );
+    scene.add( directionalLight.target );
+    
+    // this light used when soft ambient light and directional light are disabled
+    hardAmbientLight = new THREE.AmbientLight( 0xFFFFFF );
+	scene.add( hardAmbientLight );
+    hardAmbientLight.visible = false;
+    
+    camera = new THREE.PerspectiveCamera( 70, 800/600, 0.01, 100 );
+	camera.position.set(0,1,4);
+
+    directionalLight.position = camera.position
+    
+    // add background color
+    scene.background = new THREE.Color( 0xcccccc );
+
+    // controls
+    controls = new THREE.OrbitControls( camera, renderer.domElement );
+    controls.enableKeys = false;
+    controls.enablePan = true;
+    
+    // including grid for sense of spatial orientation
+    var size = 20;
+    var divisions = 20;
+    gridHelper = new THREE.GridHelper( size, divisions );
+    scene.add( gridHelper );
+    
+    // including axes for sense of spatial orientation
+    axesHelper = new THREE.Object3D();
+    axesHelper.visible = false;
+    scene.add( axesHelper );
+    let axisGeometry = new THREE.CylinderGeometry(0.02, 0.02, 4, 16);
+    let xAxis = new THREE.Mesh( axisGeometry, new THREE.MeshBasicMaterial({color: 0xFF0000}) );
+    let yAxis = new THREE.Mesh( axisGeometry, new THREE.MeshBasicMaterial({color: 0x00CC00}) );
+    let zAxis = new THREE.Mesh( axisGeometry, new THREE.MeshBasicMaterial({color: 0x0000FF}) );
+    xAxis.rotateZ(Math.PI / 2);
+    zAxis.rotateX(Math.PI / 2);
+    axesHelper.add(xAxis);
+    axesHelper.add(yAxis);
+    axesHelper.add(zAxis);
+    
+	// container for model
+    chemGroup = new THREE.Group();
+    scene.add( chemGroup );
+}
+
+
+function animate() 
+{
+	requestAnimationFrame( animate );
+    update();
+    render();
+}
+
+function update()
+{
+    
+}
+
+function render()
+{
+    renderer.render( scene, camera );
+}
+
+
+// apply jQuery formatting (e.g. font) to entire body
+$("body").addClass("ui-widget");
+
+// Set all buttons to jQuery UI style
+$("button").button();
+
+function loadData(fileName)
+{
+    // load data from text file
+	var req = new XMLHttpRequest();
+	req.open('GET', 'data/' + fileName);
+	req.onreadystatechange = function() 
+	{
+		if (req.readyState == 4) 
+		{
+            let chemTextData = req.responseText;            
+            let chemArrayData = [];
+            let lines = chemTextData.split("\n");
+            for (let n=2; n<lines.length; n++)
+            {
+                let line = lines[n];
+                let rawArrayData = line.split(" ").remove("");
+                // quick check for valid formatting (also avoids empty lines)
+                if (rawArrayData.length == 4)
+                    chemArrayData.push( { element:rawArrayData[0], x:rawArrayData[1], y:rawArrayData[2], z:rawArrayData[3] } );                
+            }
+            
+            // display text data
+            $("#chemData").val(chemTextData);
+            // draw processed data
+            drawData(chemArrayData);
+		}
+	};
+	req.send();
+}
+
+// color data from: https://en.wikipedia.org/wiki/CPK_coloring
+var CPK_colors =
+{   H:"white",      C:"black",      N:"blue",       O:"red", 
+    F:"lime",       Cl:"lime",      Br:"dark red",  I:"dark violet",
+    He:"cyan",      Ne:"cyan",      Ar:"cyan",      Xe:"cyan",      Kr:"cyan",
+    P:"orange",     S:"yellow",     B:"peach",
+    Li:"violet",    Na:"violet",    K:"violet",     Rb:"violet",    Cs:"violet",    Fr:"violet", 
+};
+
+// add correctly colored spheres to chemGroup object in scene
+function drawData(chemArrayData)
+{
+    // discard any objects in current group
+    for (let n=chemGroup.children.length-1; n>=0; n--)
+    {
+        let object = chemGroup.children[n];
+        object.geometry.dispose();
+        object.material.dispose();
+        chemGroup.remove( object );
+    }
+    
+    // parameters:
+    let sphereSize = 0.5; // should this vary depending on the element?
+    
+    // what if one is colorblind - add labels to spheres, containing rotating element name texture?
+    // autorotate option?
+    
+    for (let n=0; n<chemArrayData.length; n++)
+    {
+        let atomData = chemArrayData[n];
+        let sphereColor = CPK_colors[ atomData["element"] ];
+        let sphereGeometry = new THREE.SphereGeometry( sphereSize, 32,32 );
+        let sphereMaterial = new THREE.MeshLambertMaterial( {color: sphereColor, transparent:true} );
+        let sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+        sphere.position.set( atomData.x, atomData.y, atomData.z );
+        chemGroup.add(sphere);
+    }
+}
+
+
+// show something at startup
+loadData("Ethane.xyz");
+
+</script>
+
+
+</body>
+</html>
