@@ -72,7 +72,7 @@
 <div id="renderArea" style="display: inline-block; border: 2px solid blue"></div>
 </center>
 
-<!-- TODO: collapsible table; S/M/L image size w:400 800 1200 -->
+<!-- TODO: S/M/L image size w:400 800 1200 -->
 <div id="accordion">
     <h3>Viewer Settings</h3>
         <div><center><table cellpadding="4">
@@ -266,7 +266,7 @@ function initialize()
     directionalLight.position = camera.position
     
     // add background color
-    scene.background = new THREE.Color( 0xcccccc );
+    scene.background = new THREE.Color( 0xeeeeff );
 
     // controls
     controls = new THREE.OrbitControls( camera, renderer.domElement );
@@ -341,7 +341,12 @@ function loadData(fileName)
                 let rawArrayData = line.split(" ").remove("");
                 // quick check for valid formatting (also avoids empty lines)
                 if (rawArrayData.length == 4)
-                    chemArrayData.push( { element:rawArrayData[0], x:rawArrayData[1], y:rawArrayData[2], z:rawArrayData[3] } );                
+                    chemArrayData.push({ 
+                        element:rawArrayData[0], 
+                        x:parseFloat(rawArrayData[1]), 
+                        y:parseFloat(rawArrayData[2]), 
+                        z:parseFloat(rawArrayData[3]) 
+                    });                
             }
             
             // display text data
@@ -361,6 +366,17 @@ var CPK_colors =
     P:"orange",     S:"yellow",     B:"peach",
     Li:"violet",    Na:"violet",    K:"violet",     Rb:"violet",    Cs:"violet",    Fr:"violet", 
 };
+
+// unit: angstroms
+// TODO: finish entering values
+var covalent_radius = 
+{   H:0.31,         C:0.69,         N:0.71,         O:0.66, 
+    F:"lime",       Cl:"lime",      Br:"dark red",  I:"dark violet",
+    He:"cyan",      Ne:"cyan",      Ar:"cyan",      Xe:"cyan",      Kr:"cyan",
+    P:"orange",     S:"yellow",     B:"peach",
+    Li:"violet",    Na:"violet",    K:"violet",     Rb:"violet",    Cs:"violet",    Fr:"violet", 
+};
+
 
 // add correctly colored spheres to chemGroup object in scene
 function drawData(chemArrayData)
@@ -390,8 +406,60 @@ function drawData(chemArrayData)
         sphere.position.set( atomData.x, atomData.y, atomData.z );
         chemGroup.add(sphere);
     }
+    
+    for (let m=0; m<chemArrayData.length; m++)
+    {
+        let atomData1 = chemArrayData[m];
+        // starting index chosen so all pairs considered exactly once
+        for (let n=m+1; n<chemArrayData.length; n++)
+        {
+            let atomData2 = chemArrayData[n];
+            // console.log("-------------------");
+            let minimumBondingDistance = 0.4;
+            let bondTolerance = 0.45;
+            let maximumBondingDistance = 
+                covalent_radius[atomData1.element] + covalent_radius[atomData2.element] + bondTolerance;
+            let atomDistance = Math.sqrt( 
+                Math.pow(atomData2.x - atomData1.x, 2) + 
+                Math.pow(atomData2.y - atomData1.y, 2) + 
+                Math.pow(atomData2.z - atomData1.z, 2) ); 
+            let bond = (minimumBondingDistance <= atomDistance &&
+                        atomDistance <= maximumBondingDistance);
+            if (bond)
+            {
+                // debug:
+                // console.log( atomData1.element, atomData2.element, minimumBondingDistance.toFixed(3), atomDistance.toFixed(3), maximumBondingDistance.toFixed(3), bond)
+                let point1 = new THREE.Vector3(atomData1.x, atomData1.y, atomData1.z);
+                let point2 = new THREE.Vector3(atomData2.x, atomData2.y, atomData2.z);
+                
+                let cylinder = cylinderMesh(point1, point2, 0.1, "#666666");
+                console.log(cylinder)
+                chemGroup.add(cylinder);
+            }
+        }
+    }
+    
+    
 }
 
+function cylinderMesh(pointX, pointY, radius, color) 
+{
+    var direction = new THREE.Vector3().subVectors(pointY, pointX);
+    var orientation = new THREE.Matrix4();
+    orientation.lookAt(pointX, pointY, new THREE.Object3D().up);
+    orientation.multiply(new THREE.Matrix4().set(1, 0, 0, 0,
+                                           0, 0, 1, 0,
+                                           0, -1, 0, 0,
+                                           0, 0, 0, 1));
+    var cylGeometry = new THREE.CylinderGeometry(radius, radius, direction.length(), 16, 1);
+    var cylMaterial = new THREE.MeshLambertMaterial( {color:color} );
+    var cyl = new THREE.Mesh(cylGeometry, cylMaterial);
+    cyl.applyMatrix(orientation);
+    cyl.position.x = (pointY.x + pointX.x) / 2;
+    cyl.position.y = (pointY.y + pointX.y) / 2;
+    cyl.position.z = (pointY.z + pointX.z) / 2;
+    return cyl;
+}
 
 // show something at startup
 loadData("Ethane.xyz");
