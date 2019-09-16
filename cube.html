@@ -13,26 +13,54 @@
 	<script src="threex/threex-artoolkitcontext.js"></script>
 	<script src="threex/threex-arbasecontrols.js"></script>
 	<script src="threex/threex-armarkercontrols.js"></script>
+    
+    <script src="js/jquery-3.3.1.js"></script>
+	<link rel="stylesheet" href="js/jquery-ui.css">
+	<script src="js/jquery-ui.js"></script>
+    
 </head>
 
-<body xstyle='margin : 0px; overflow: hidden; font-family: Monospace;'>
+<body>
 
 <!-- 
   Example created by Lee Stemkoski: https://github.com/stemkoski
   Based on the AR.js library and examples created by Jerome Etienne: https://github.com/jeromeetienne/AR.js/
 -->
 
+<div id="controlPanel" style="z-index: 10;">
+    <select class="selectMenu" id="preset">
+        <option disabled selected>Presets</option>
+        <option value="red">Red</option>
+        <option value="green">Green</option> 
+    </select>
+</div>
+        
 <script>
 
+// user interface controls setup ====================================================================
+
+
+$("#preset").on('selectmenuchange', function() {
+    let selection = this.value;
+    doSomething(selection);
+});
+
+// apply formatting/style
+$(".selectMenu").selectmenu();
+
+function doSomething(selection)
+{
+    // console.log(sceneGroup);
+    sceneGroup.children[0].material.color.set(selection);
+}
+
+
+// Three.js scene setup =============================================================================
+
 var scene, camera, renderer, clock, deltaTime, totalTime;
-
 var arToolkitSource, arToolkitContext;
-
 var markerNames, markerArray, currentMarkerName;
-
 var sceneGroup;
-
-var globe;
 
 initialize();
 animate();
@@ -57,6 +85,8 @@ function initialize()
 	renderer.domElement.style.position = 'absolute'
 	renderer.domElement.style.top = '0px'
 	renderer.domElement.style.left = '0px'
+    renderer.domElement.style["z-index"] = '-1'
+    
 	document.body.appendChild( renderer.domElement );
 
 	clock = new THREE.Clock();
